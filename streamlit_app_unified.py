@@ -155,14 +155,17 @@ st.markdown("""
         padding: 1rem;
         border-radius: 10px;
         margin-bottom: 1rem;
+        color: black;
     }
     .user-message {
-        background-color: #e3f2fd;
-        text-align: right;
+        background-color: #f0f8ff;
+        text-align: left;
+        color: black;
     }
     .bot-message {
         background-color: #f5f5f5;
         text-align: left;
+        color: black;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -232,10 +235,10 @@ def process_chat_query(query: str, df: pd.DataFrame = None) -> Tuple[str, pd.Dat
     
     # Create prompt for Excel operations
     system_prompt = """You are an AI assistant specialized in Excel data operations.
-    When users ask about data operations, provide:
-    1. Clear explanation of what you'll do
-    2. Python code to perform the operation (if applicable)
-    3. Summary of changes made
+    When users ask about data operations, provide very brief, simple confirmations only.
+    Do NOT provide explanations, technical details, or descriptions of what will happen.
+    Just acknowledge the request briefly and provide executable Python code.
+    Keep responses to 1-2 sentences maximum.
     
     For queries that modify data, generate executable Python code using pandas.
     Always return the modified dataframe as 'df'.
@@ -283,6 +286,18 @@ def process_chat_query(query: str, df: pd.DataFrame = None) -> Tuple[str, pd.Dat
                         st.success("✅ Operation executed successfully!")
                 except Exception as e:
                     st.error(f"Failed to execute operation: {str(e)}")
+            
+            # Remove code blocks and technical explanations from response to keep it clean
+            response = re.sub(r'```python\n.*?\n```', '', response, flags=re.DOTALL)
+            # Remove common technical explanation patterns
+            response = re.sub(r'This will.*?(?=\.|$)', '', response, flags=re.DOTALL)
+            response = re.sub(r'Here\'s.*?(?=\.|$)', '', response, flags=re.DOTALL)
+            response = re.sub(r'The dataframe.*?(?=\.|$)', '', response, flags=re.DOTALL)
+            response = response.strip()
+            
+            # If response is mostly empty after cleaning, provide simple confirmation
+            if not response or len(response.strip()) < 10:
+                response = "Done! Operation completed successfully."
     
     return response, modified_df
 
@@ -375,7 +390,7 @@ def display_metadata(metadata: Dict[str, Any]):
             st.write(f"**{dtype}:** {count} columns")
 
 def display_quality_score(score: int, report: Dict[str, Any]):
-    """Display quality score with visual styling and token usage"""
+    """Display quality score with visual styling"""
     if score >= 70:
         quality_class = "quality-high"
         emoji = "🟢"
@@ -391,16 +406,6 @@ def display_quality_score(score: int, report: Dict[str, Any]):
         {emoji} Data Quality Score: {score}%
     </div>
     """, unsafe_allow_html=True)
-    
-    # Display token usage
-    if st.session_state.token_usage['total_cost'] > 0:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📊 Input Tokens", f"{st.session_state.token_usage['input_tokens']:,}")
-        with col2:
-            st.metric("📤 Output Tokens", f"{st.session_state.token_usage['output_tokens']:,}")
-        with col3:
-            st.metric("💵 Total Cost", f"${st.session_state.token_usage['total_cost']:.4f}")
     
     if report.get('issues'):
         st.warning("**Issues Found:**")
@@ -563,26 +568,10 @@ st.markdown('<h1 class="main-header">🤖 Excel Data Cleaner with AI Assistant</
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### ⚙️ Configuration")
-    
-    # Detect configuration source
-    config_source = "Unknown"
+    # Check API key status (silently)
     api_key = get_anthropic_api_key()
     
-    if api_key:
-        try:
-            if hasattr(st, 'secrets') and 'ANTHROPIC_API_KEY' in st.secrets:
-                config_source = "Streamlit Secrets"
-                st.info("Using Streamlit secrets (deployment mode)")
-            else:
-                config_source = "Environment Variables"
-                st.info("Using environment variables (.env file)")
-        except:
-            config_source = "Environment Variables"
-            st.info("Using environment variables (.env file)")
-        
-        st.success(f"✅ API Key configured from {config_source}")
-    else:
+    if not api_key:
         st.error("❌ API Key not found")
         st.info("""
         **For deployment:**
@@ -592,35 +581,37 @@ with st.sidebar:
         Add ANTHROPIC_API_KEY to .env file
         """)
     
-    # Display token usage and cost
-    if st.session_state.token_usage['total_cost'] > 0:
-        st.markdown("### 💰 Token Usage & Cost")
-        st.write(f"""
-        **Input Tokens:** {st.session_state.token_usage['input_tokens']:,}
-        **Output Tokens:** {st.session_state.token_usage['output_tokens']:,}
-        **Total Cost:** ${st.session_state.token_usage['total_cost']:.4f}
-        """)
-        st.caption("""
-        Claude Pricing:
-        - Input: $3/million tokens
-        - Output: $15/million tokens
-        """)
-    
-    # Display cleaning history
-    if st.session_state.cleaning_history:
-        st.markdown("### 📊 Cleaning History")
-        for entry in st.session_state.cleaning_history:
-            st.write(f"**Iteration {entry['iteration']}**")
-            st.write(f"• Quality: {entry['quality_score']}%")
-            st.write(f"• Changes: {entry['changes_applied']}")
-            st.write(f"• Shape: {entry['shape']}")
-    
-    # LLM Activity Log
-    if st.session_state.llm_logs:
-        st.markdown("### 🤖 LLM Activity Log")
-        with st.expander("View Activity"):
-            for log in reversed(st.session_state.llm_logs[-10:]):
-                st.markdown(log)
+    # Only show token usage and logs when AI chat is not active
+    if not st.session_state.chat_mode:
+        # Display token usage and cost
+        if st.session_state.token_usage['total_cost'] > 0:
+            st.markdown("### 💰 Token Usage & Cost")
+            st.write(f"""
+            **Input Tokens:** {st.session_state.token_usage['input_tokens']:,}
+            **Output Tokens:** {st.session_state.token_usage['output_tokens']:,}
+            **Total Cost:** ${st.session_state.token_usage['total_cost']:.4f}
+            """)
+            st.caption("""
+            Claude Pricing:
+            - Input: $3/million tokens
+            - Output: $15/million tokens
+            """)
+        
+        # Display cleaning history
+        if st.session_state.cleaning_history:
+            st.markdown("### 📊 Cleaning History")
+            for entry in st.session_state.cleaning_history:
+                st.write(f"**Iteration {entry['iteration']}**")
+                st.write(f"• Quality: {entry['quality_score']}%")
+                st.write(f"• Changes: {entry['changes_applied']}")
+                st.write(f"• Shape: {entry['shape']}")
+        
+        # LLM Activity Log
+        if st.session_state.llm_logs:
+            st.markdown("### 🤖 LLM Activity Log")
+            with st.expander("View Activity"):
+                for log in reversed(st.session_state.llm_logs[-10:]):
+                    st.markdown(log)
     
     # Chat mode toggle
     st.markdown("### 💬 AI Assistant")
@@ -736,9 +727,6 @@ with tabs[0]:
                     tokens_after = ai_service.get_token_usage()
                     tokens_used = tokens_after['total_tokens'] - tokens_before['total_tokens']
                     cost_incurred = tokens_after['total_cost'] - tokens_before['total_cost']
-                    
-                    if tokens_used > 0:
-                        st.info(f"🤖 AI Processing - Tokens: {tokens_used:,}, Cost: ${cost_incurred:.4f}")
                     
                     changes = processing_changes
                     st.session_state.current_df = df_processed
@@ -955,18 +943,7 @@ with tabs[4]:
     st.markdown("<div class='section-header'>Step 4: Download Cleaned Data</div>", unsafe_allow_html=True)
     
     if st.session_state.current_df is not None:
-        # Display final token usage and cost
-        if st.session_state.token_usage['total_cost'] > 0:
-            st.success(f"""
-            🎉 **Processing Complete!**
-            - Total Input Tokens: {st.session_state.token_usage['input_tokens']:,}
-            - Total Output Tokens: {st.session_state.token_usage['output_tokens']:,}
-            - **Total Cost for this Excel file: ${st.session_state.token_usage['total_cost']:.4f}**
-            
-            💰 **Pricing Information:**
-            - Claude Input: $3 per million tokens
-            - Claude Output: $15 per million tokens
-            """)
+        st.success("🎉 **Processing Complete!**")
         
         st.write("### 💾 Download Options")
         
@@ -1003,12 +980,4 @@ with tabs[4]:
 
 # Footer
 st.markdown("---")
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.markdown("🤖 Excel Data Cleaner with AI Assistant | Powered by Claude AI")
-with col2:
-    if st.button("🔄 Reset Token Counter"):
-        ai_service = get_ai_service()
-        ai_service.reset_token_usage()
-        st.session_state.token_usage = {'input_tokens': 0, 'output_tokens': 0, 'total_cost': 0.0}
-        st.success("✅ Token counter reset!")
+st.markdown("🤖 Excel Data Cleaner with AI Assistant")
