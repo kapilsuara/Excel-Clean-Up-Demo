@@ -781,7 +781,7 @@ with tabs[0]:
                     
                     # Show preview
                     st.subheader("Data Preview (After Basic Cleaning)")
-                    st.dataframe(df_processed.head(20), use_container_width=True)
+                    st.dataframe(df_processed.head(20), use_container_width=True, hide_index=True)
                     
                     # Generate and display metadata
                     with st.spinner("Generating metadata..."):
@@ -903,7 +903,7 @@ with tabs[2]:
             # Show current data preview
             if st.session_state.current_df is not None:
                 st.markdown("### 📊 Current Data Preview")
-                st.dataframe(st.session_state.current_df.head(20), use_container_width=True)
+                st.dataframe(st.session_state.current_df.head(20), use_container_width=True, hide_index=True)
                 
                 # Quick stats
                 col1, col2, col3 = st.columns(3)
@@ -925,7 +925,7 @@ with tabs[3]:
             display_quality_score(st.session_state.quality_score, st.session_state.quality_report)
         
         st.subheader("Cleaned Data Preview")
-        st.dataframe(st.session_state.current_df.head(50), use_container_width=True)
+        st.dataframe(st.session_state.current_df.head(50), use_container_width=True, hide_index=True)
         
         if st.session_state.metadata:
             st.subheader("Dataset Metadata")
